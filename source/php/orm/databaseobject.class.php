@@ -15,13 +15,13 @@ abstract class DatabaseObject
 {
 
     // Abstract Methods Must be implemeneted by Child Classes
-    
+
     abstract protected static function getPrimaryKeyName();
 
     abstract protected function getPrimaryKeyValue();
 
     abstract protected static function getTableName();
-    
+
     abstract public static function filterPost();
 
     /**
@@ -190,8 +190,8 @@ abstract class DatabaseObject
         $class_name = get_called_class();
 
         $obj = new $class_name();
-        $obj->where_clause = "WHERE ";
-        $obj->order_clause = "ORDER BY ";
+        $obj->where_array = array();
+        $obj->order_array = array();
 
         return $obj;
     }
@@ -202,13 +202,16 @@ abstract class DatabaseObject
      * @param string $operator
      * @param        $value
      * @param null   $value_2
+     * @param string $type
+     * @param bool   $group_start_end
      * @return $this
      * @throws Exception
      */
-    final public function where(string $property, string $operator, $value, $value_2 = null)
+    final public function where(string $property, string $operator, $value, $value_2 = null, string $type = "AND", bool $group_start_end = false)
     {
         $class_name = get_class($this);
         $operator = strtoupper($operator);
+        $type = strtoupper($type);
         $allowed_operators = ['=', '!=', '>=', '<=', '>', '<', '<>', 'BETWEEN', 'NOT BETWEEN', 'IN', 'NOT IN', 'LIKE', 'NOT LIKE', '~', '&', '|', '^'];
 
         // Ensure property is valid for class.
@@ -228,26 +231,15 @@ abstract class DatabaseObject
             }
         }
 
-        // If this is an additional clause, add AND
-        if ($this->where_clause !== "WHERE ") {
-            $this->where_clause .= "AND ";
+        // Ensure that type is either AND/OR.
+        if (!in_array($type,["AND","OR"])) {
+            if (!isset($value_2)) {
+                throw new Exception($operator . " type can only be 'AND' or 'OR'.");
+            }
         }
 
-        // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
-        if ($operator != "IN" && $operator != "NOT IN") {
-            $value = "'" . $value . "'";
-        }
-        if (isset($value_2)) {
-            $value_2 = "'" . $value_2 . "'";
-        }
-
-        // Add to the clause
-        $this->where_clause .= "{$property} {$operator} {$value} ";
-
-        // If this is a BETWEEN clause, we need to do AND and then add the second value.
-        if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
-            $this->where_clause .= "AND {$value_2} ";
-        }
+        // Add array of arguments to the where array.
+        $this->where_array[] = [$property, $operator, $value, $value_2, $type, $group_start_end];
 
         // Return the instance to allow for fluent interfacing.
         return $this;
@@ -276,13 +268,8 @@ abstract class DatabaseObject
             throw new Exception("Order '" . $order . "' is not an allowed order.");
         }
 
-        // If this is an additional clause, add a comma
-        if ($this->order_clause !== "ORDER BY ") {
-            $this->order_clause .= ", ";
-        }
-
-        // Add order to clause
-        $this->order_clause .= "{$property} {$order}";
+        // Add array of arguments to the order array.
+        $this->order_array[] = [$property, $order];
 
         // Return the instance to allow for fluent interfacing.
         return $this;
@@ -302,22 +289,93 @@ abstract class DatabaseObject
 
         $class_name = get_class($this);
 
-        // Query the DB and Get the Info of the item we are going to edit
-        $sql = "SELECT * FROM " . static::getTableName() . " ";
+        $where_clause = "";
+        $order_clause = "";
 
-        // If there where clause was used, added it.
-        if (isset($this->where_clause)) {
-            if (strlen($this->where_clause) > 6) {
-                $sql .= $this->where_clause;
+        // If there are where clauses to be added, generate the clause.
+        if (!empty($this->where_array)) {
+
+            // Initialize
+            $where_clause = "WHERE ";
+            $group_open = false;
+
+            foreach ($this->where_array as $entry) {
+
+                // Set Variables
+                $property = $entry[0];
+                $operator = $entry[1];
+                $value_1 = $entry[2];
+                $value_2 = $entry[3];
+                $type = $entry[4];
+                $group_start_end = $entry[5];
+
+                // Are we starting the group?
+                if ($group_start_end && !$group_open) {
+                    $where_clause .= "( ";
+                }
+
+                // If this is not the first clause, add the type.
+                if ($where_clause !== "WHERE ") {
+                    $where_clause .= "{$type} ";
+                }
+
+                // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
+                if ($operator != "IN" && $operator != "NOT IN") {
+                    $value_1 = "'" . $value_1 . "'";
+                }
+                if (isset($value_2)) {
+                    $value_2 = "'" . $value_2 . "'";
+                }
+
+                // Add to the clause
+                $where_clause .= "{$property} {$operator} {$value_1} ";
+
+                // If this is a BETWEEN clause, we need to do AND and then add the second value.
+                if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+                    $where_clause .= "AND {$value_2} ";
+                }
+
+                // Are we closing a group?
+                if ($group_start_end && $group_open) {
+                    $where_clause .= ") ";
+                }
+
+                // Did we Open/Close a group?
+                if ($group_start_end) {
+                    $group_open = !$group_open;
+                }
+
+            }
+
+        }
+
+        // If there are order clauses to be added, generate the clause.
+        if (!empty($this->order_array)) {
+
+            // Initialize
+            $order_clause = "ORDER BY ";
+            $total = 0;
+
+            foreach ($this->order_array as $entry) {
+
+                // Set the Properties
+                $property = $entry[0];
+                $order = $entry[1];
+
+                // If this is an additional clause, add a comma
+                if ($total > 0) {
+                    $order_clause .= ", ";
+                }
+
+                // Add to the Order Clause
+                $order_clause .= "{$property} {$order}";
+                $total++;
+
             }
         }
 
-        // If there order clause was used, added it.
-        if (isset($this->order_clause)) {
-            if (strlen($this->order_clause) > 9) {
-                $sql .= $this->order_clause;
-            }
-        }
+        // Setup the query to the DB and get the info of the item we are going to edit
+        $sql = "SELECT * FROM " . static::getTableName() . " " . $where_clause . $order_clause;
 
         $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
