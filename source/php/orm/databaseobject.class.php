@@ -3,15 +3,18 @@
 /**
  * Created by PhpStorm.
  * User: jwill
- * Date: 10/6/2017
- * Time: 11:19 AM
+ * Date: 10/17/2017
+ * Time: 10:21 AM
  */
 
+namespace System;
+
 /**
- * Class DatabaseObject
+ * Class DataObject
  * The basic class for all objects that are stored in the database.
+ * @package System
  */
-abstract class DatabaseObject
+abstract class DataObject
 {
 
     // Abstract Methods Must be implemeneted by Child Classes
@@ -60,16 +63,46 @@ abstract class DatabaseObject
         // Return Array without Primary Key Property
         $class_props = get_class_vars($this);
         $properties = array_filter(get_object_vars($this), function ($key) use ($class_props) {
-                return array_key_exists($key, $class_props);
+            return array_key_exists($key, $class_props);
         }, ARRAY_FILTER_USE_KEY);
         unset($properties[static::getPrimaryKeyName()]);
 
         return $properties;
     }
 
+
+    /**
+     * Returns a true/false if an object exists with the requested primary key value.
+     * @param int $primary_key_value
+     * @return bool
+     * @throws \Exception
+     */
+    final public static function exists(int $primary_key_value): bool
+    {
+        // Using the DB
+        $db = DB::getInstance();
+
+        // Query the database
+        $sql = "SELECT 1 FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value LIMIT 1";
+        $sth = $db->query($sql);
+
+        // If we got false, then there was a big fat error.
+        if ($sth === false) {
+            throw new \Exception("Error: The 'item exists' query failed in the DataObject class.");
+        }
+
+        // If we got a result, if there are no rows, then it doesn't exist, or it does.
+        if ($sth->rowCount() > 0)
+            return true;
+        else {
+            return false;
+        }
+
+    }
+
     /**
      * Takes an object and adds it to the database.
-     * @return stdClass
+     * @return \stdClass
      */
     final public function add()
     {
@@ -78,7 +111,7 @@ abstract class DatabaseObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new stdClass;
+        $return_value = new \stdClass;
 
         // Set default empty arrays
         $field_array = array();
@@ -112,7 +145,7 @@ abstract class DatabaseObject
 
     /**
      * Updates an object already in the database.
-     * @return stdClass
+     * @return \stdClass
      */
     final public function update()
     {
@@ -121,7 +154,7 @@ abstract class DatabaseObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new stdClass;
+        $return_value = new \stdClass;
 
         // Set default empty arrays
         $field_array = array();
@@ -154,7 +187,7 @@ abstract class DatabaseObject
 
     /**
      * Deleted an existing object from the datase.
-     * @return stdClass
+     * @return \stdClass
      */
     final public function delete()
     {
@@ -163,7 +196,7 @@ abstract class DatabaseObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new stdClass;
+        $return_value = new \stdClass;
 
         // Setup the Query
         $sql = "DELETE FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
@@ -200,12 +233,12 @@ abstract class DatabaseObject
      * Adds to the "WHERE" clause of the query to find objects.
      * @param string $property
      * @param string $operator
-     * @param        $value
+     * @param mixed  $value
      * @param null   $value_2
      * @param string $type
      * @param bool   $group_start_end
      * @return $this
-     * @throws Exception
+     * @throws \Exception
      */
     final public function where(string $property, string $operator, $value, $value_2 = null, string $type = "AND", bool $group_start_end = false)
     {
@@ -216,25 +249,25 @@ abstract class DatabaseObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
-            throw new Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (WHERE)");
+            throw new \Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (WHERE)");
         }
 
         // Ensure operator is allowed and safe.
         if (!in_array($operator, $allowed_operators)) {
-            throw new Exception("Operator '" . $operator . "' is not an allowed operator.");
+            throw new \Exception("Operator '" . $operator . "' is not an allowed operator.");
         }
 
         // Ensure that BETWEEN and NOT BETWEEN have both values.
         if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
             if (!isset($value_2)) {
-                throw new Exception($operator . " requires 2 values; only one was passed.");
+                throw new \Exception($operator . " requires 2 values; only one was passed.");
             }
         }
 
         // Ensure that type is either AND/OR.
         if (!in_array($type,["AND","OR"])) {
             if (!isset($value_2)) {
-                throw new Exception($operator . " type can only be 'AND' or 'OR'.");
+                throw new \Exception($operator . " type can only be 'AND' or 'OR'.");
             }
         }
 
@@ -251,7 +284,7 @@ abstract class DatabaseObject
      * @param string $property
      * @param string $order
      * @return $this
-     * @throws Exception
+     * @throws \Exception
      */
     final public function order(string $property, string $order = "DESC")
     {
@@ -260,12 +293,12 @@ abstract class DatabaseObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
-            throw new Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (ORDER)");
+            throw new \Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (ORDER)");
         }
 
         // Ensure order is allowed and safe.
         if (!in_array($order, ["ASC", "DESC"])) {
-            throw new Exception("Order '" . $order . "' is not an allowed order.");
+            throw new \Exception("Order '" . $order . "' is not an allowed order.");
         }
 
         // Add array of arguments to the order array.
@@ -279,7 +312,7 @@ abstract class DatabaseObject
     /**
      * Finalizes the query and gets objects that match. Returns single objects, array of objects, or false for no objects.
      * @return array|bool|mixed
-     * @throws Exception
+     * @throws \Exception
      */
     final public function get()
     {
@@ -309,14 +342,14 @@ abstract class DatabaseObject
                 $type = $entry[4];
                 $group_start_end = $entry[5];
 
-                // Are we starting the group?
-                if ($group_start_end && !$group_open) {
-                    $where_clause .= "( ";
-                }
-
                 // If this is not the first clause, add the type.
                 if ($where_clause !== "WHERE ") {
                     $where_clause .= "{$type} ";
+                }
+
+                // Are we starting the group?
+                if ($group_start_end && !$group_open) {
+                    $where_clause .= "( ";
                 }
 
                 // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
@@ -377,19 +410,39 @@ abstract class DatabaseObject
         // Setup the query to the DB and get the info of the item we are going to edit
         $sql = "SELECT * FROM " . static::getTableName() . " " . $where_clause . $order_clause;
 
-        $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
+        $result = $db->query($sql, \PDO::FETCH_CLASS, $class_name);
+
 
         // Determine if any results were had.
         if ($result) {
             if ($result->rowCount() == 1) {
-                return $result->fetch();
+                $the_return = $result->fetch();
             } else if ($result->rowCount() > 1) {
-                return $result->fetchAll();
+                $the_return = $result->fetchAll();
             } else {
                 return false;
             }
+
+            // If the return is a user class, we need to remove the password
+            if (property_exists($class_name, 'cleared_properties')) {
+                // If we have one object, unset password. if array, unset all passwords.
+                if (!is_array($the_return)) {
+                    foreach ($class_name::$cleared_properties as $property) {
+                        unset($the_return->$property);
+                    }
+                } else {
+                    foreach ($the_return as &$user) {
+                        foreach ($class_name::$cleaered_properties as $property) {
+                            unset($user->$property);
+                        }
+                    }
+                }
+            }
+
+            return $the_return;
+
         } else {
-            throw new Exception("Error Code " . $result->errorCode() . ": " . $result->errorInfo() . ".");
+            throw new \Exception("Error Code " . $result->errorCode() . ": " . $result->errorInfo() . ".");
         }
 
     }
