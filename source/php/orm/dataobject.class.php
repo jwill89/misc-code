@@ -31,7 +31,7 @@ abstract class DataObject
      * DatabaseObject constructor. Takes array of properties and sets matching keys.
      * @param array|null $arr
      */
-    public function __construct(array $arr = null)
+    function __construct(array $arr = null)
     {
         // Is the Array Not Empty?
         if (!empty($arr) && is_array($arr)) {
@@ -61,7 +61,7 @@ abstract class DataObject
     {
 
         // Return Array without Primary Key Property
-        $class_props = get_class_vars($this);
+        $class_props = get_class_vars(get_class($this));
         $properties = array_filter(get_object_vars($this), function ($key) use ($class_props) {
             return array_key_exists($key, $class_props);
         }, ARRAY_FILTER_USE_KEY);
@@ -69,7 +69,6 @@ abstract class DataObject
 
         return $properties;
     }
-
 
     /**
      * Returns a true/false if an object exists with the requested primary key value.
@@ -170,6 +169,7 @@ abstract class DataObject
 
         // Setup the Query
         $sql = "UPDATE " . static::getTableName() . " SET " . implode(",", $field_array) . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+
         $sth = $db->prepare($sql);
 
         // If successful, return true, if false, return false and error.
@@ -212,6 +212,34 @@ abstract class DataObject
         // Return the info
         return $return_value;
 
+    }
+
+    /**
+     * Gets a single instance of a class object or false if entry doesn't exist.
+     * @param $primary_key_value
+     * @return bool|mixed
+     */
+    final public static function getSingle($primary_key_value)
+    {
+        // DB Connection
+        $db = DB::getInstance();
+
+        // Set Class Name
+        $class_name = get_called_class();
+
+        $sql = "SELECT * FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value";
+
+        $result = $db->query($sql, \PDO::FETCH_CLASS, $class_name);
+
+        if ($result) {
+            if ($result->rowCount() == 1) {
+                return $result->fetch();
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -283,13 +311,15 @@ abstract class DataObject
      * Adds to the "ORDER BY" clause of the query to find objects.
      * @param string $property
      * @param string $order
+     * @param string $function
      * @return $this
      * @throws \Exception
      */
-    final public function order(string $property, string $order = "DESC")
+    final public function order(string $property, string $order = "DESC", string $function = null)
     {
         $class_name = get_class($this);
         $order = strtoupper($order);
+        $function = (isset($function)) ? strtoupper($function) : null;
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
@@ -301,8 +331,13 @@ abstract class DataObject
             throw new \Exception("Order '" . $order . "' is not an allowed order.");
         }
 
+        // Ensure function is allowed and safe.
+        if (isset($function) && !in_array($function, ["COUNT", "LENGTH", "TRIM"])) {
+            throw new \Exception("Function '" . $function . "' is not an allowed order-level function.");
+        }
+
         // Add array of arguments to the order array.
-        $this->order_array[] = [$property, $order];
+        $this->order_array[] = [$property, $order, $function];
 
         // Return the instance to allow for fluent interfacing.
         return $this;
@@ -310,8 +345,8 @@ abstract class DataObject
     }
 
     /**
-     * Finalizes the query and gets objects that match. Returns single objects, array of objects, or false for no objects.
-     * @return array|bool|mixed
+     * Finalizes the query and gets objects that match. Returns array of objects or false for no objects.
+     * @return array|bool
      * @throws \Exception
      */
     final public function get()
@@ -394,6 +429,7 @@ abstract class DataObject
                 // Set the Properties
                 $property = $entry[0];
                 $order = $entry[1];
+                $function = $entry[2];
 
                 // If this is an additional clause, add a comma
                 if ($total > 0) {
@@ -401,7 +437,11 @@ abstract class DataObject
                 }
 
                 // Add to the Order Clause
-                $order_clause .= "{$property} {$order}";
+                if (isset($function)) {
+                    $order_clause .= "{$function}({$property}) {$order}";
+                } else {
+                    $order_clause .= "{$property} {$order}";
+                }
                 $total++;
 
             }
@@ -409,6 +449,9 @@ abstract class DataObject
 
         // Setup the query to the DB and get the info of the item we are going to edit
         $sql = "SELECT * FROM " . static::getTableName() . " " . $where_clause . $order_clause;
+
+        // Display SQl for Debug
+        //echo $sql;
 
         $result = $db->query($sql, \PDO::FETCH_CLASS, $class_name);
 
@@ -437,6 +480,11 @@ abstract class DataObject
                         }
                     }
                 }
+            }
+
+            // If we got a single object, it must be returned in an array
+            if (!is_array($the_return)) {
+                $the_return = [$the_return];
             }
 
             return $the_return;
