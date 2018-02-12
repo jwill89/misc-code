@@ -8,6 +8,8 @@
  */
 
 namespace System;
+use Exceptions\QueryException, Exceptions\ObjectException;
+use \stdClass;
 
 /**
  * Class DataObject
@@ -87,7 +89,7 @@ abstract class DataObject
 
         // If we got false, then there was a big fat error.
         if ($sth === false) {
-            throw new \Exception("Error: The 'item exists' query failed in the DataObject class.");
+            throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
         }
 
         // If we got a result, if there are no rows, then it doesn't exist, or it does.
@@ -101,7 +103,7 @@ abstract class DataObject
 
     /**
      * Takes an object and adds it to the database.
-     * @return \stdClass
+     * @return stdClass
      */
     final public function add()
     {
@@ -110,7 +112,7 @@ abstract class DataObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new \stdClass;
+        $return_value = new stdClass;
 
         // Set default empty arrays
         $field_array = array();
@@ -124,17 +126,45 @@ abstract class DataObject
             }
         }
 
-        // Setup the Query
-        $sql = "INSERT INTO " . static::getTableName() . "  (" . implode(",", $field_array) . ") VALUES (" . implode(",", array_fill(0, count($field_array), "?")) . ")";
-        $sth = $db->prepare($sql);
+        // Start the Transaction so we can rollback on error.
+        $db->beginTransaction();
 
-        // If successful, return true, if false, return false and error.
-        if ($sth->execute($param_array)) {
-            $return_value->success = true;
-            $return_value->last_id = $db->lastInsertId();
-        } else {
+        try {
+
+            // Setup the Query
+            $sql = "INSERT INTO " . static::getTableName() . "  (" . implode(",", $field_array) . ") VALUES (" . implode(",", array_fill(0, count($field_array), "?")) . ")";
+            $sth = $db->prepare($sql);
+
+            if ($sth->execute($param_array)) {
+
+                // Set the Last Inserted ID
+                $return_value->last_id = $db->lastInsertId();
+
+                // Execute the add hook if main was successful.
+                $this->addHook();
+
+                // It Was Successful!
+                $return_value->success = true;
+
+                // Commit the Changes
+                $db->commit();
+
+            } else {
+
+                // Throw Exception
+                throw new QueryException(implode(", ", $sth->errorInfo()));
+
+            }
+
+        } catch (QueryException $e) {
+
+            // Set failed flag and error information.
             $return_value->success = false;
-            $return_value->errorInfo = implode(", ", $sth->errorInfo());
+            $return_value->errorInfo = $e->getMessage();
+
+            // Roll back the changes
+            $db->rollBack();
+
         }
 
         // Return the info
@@ -144,7 +174,7 @@ abstract class DataObject
 
     /**
      * Updates an object already in the database.
-     * @return \stdClass
+     * @return stdClass
      */
     final public function update()
     {
@@ -153,7 +183,7 @@ abstract class DataObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new \stdClass;
+        $return_value = new stdClass;
 
         // Set default empty arrays
         $field_array = array();
@@ -167,17 +197,42 @@ abstract class DataObject
             }
         }
 
-        // Setup the Query
-        $sql = "UPDATE " . static::getTableName() . " SET " . implode(",", $field_array) . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+        // Start the Transaction so we can rollback on error.
+        $db->beginTransaction();
 
-        $sth = $db->prepare($sql);
+        try {
 
-        // If successful, return true, if false, return false and error.
-        if ($sth->execute($param_array)) {
-            $return_value->success = true;
-        } else {
+            // Setup the Query
+            $sql = "UPDATE " . static::getTableName() . " SET " . implode(",", $field_array) . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+            $sth = $db->prepare($sql);
+
+            if ($sth->execute($param_array)) {
+
+                // If main was successful, run update hook
+                $this->updateHook();
+
+                // Success!
+                $return_value->success = true;
+
+                // Commit the Changes
+                $db->commit();
+
+            } else {
+
+                // Throw Exception
+                throw new QueryException(implode(", ", $sth->errorInfo()));
+
+            }
+
+        } catch (QueryException $e) {
+
+            // Set failed flag and error information.
             $return_value->success = false;
-            $return_value->errorInfo = implode(", ", $sth->errorInfo());
+            $return_value->errorInfo = $e->getMessage();
+
+            // Roll back the changes
+            $db->rollBack();
+
         }
 
         // Return the info
@@ -187,7 +242,7 @@ abstract class DataObject
 
     /**
      * Deleted an existing object from the datase.
-     * @return \stdClass
+     * @return stdClass
      */
     final public function delete()
     {
@@ -196,17 +251,40 @@ abstract class DataObject
         $db = DB::getInstance();
 
         // Set the Return Value object
-        $return_value = new \stdClass;
+        $return_value = new stdClass;
 
-        // Setup the Query
-        $sql = "DELETE FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+        // Start the Transaction so we can rollback on error.
+        $db->beginTransaction();
 
-        // If successful, return true, if false, return false and error.
-        if ($db->exec($sql)) {
-            $return_value->success = true;
-        } else {
+        try {
+
+            // Setup the Query
+            $sql = "DELETE FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+
+            if ($db->exec($sql)) {
+
+                // If successful, run the delete hook.
+                $this->deleteHook();
+
+                // It Was Successful!
+                $return_value->success = true;
+
+                // Commit the Changes
+                $db->commit();
+
+            } else {
+
+                // Error, throw a query exception.
+                throw new QueryException(implode(", ", $db->errorInfo()));
+
+            }
+
+        } catch (QueryException $e) {
+
+            // Set fail value and error message.
             $return_value->success = false;
-            $return_value->errorInfo = implode(", ", $db->errorInfo());
+            $return_value->errorInfo = $e->getMessage();
+
         }
 
         // Return the info
@@ -215,7 +293,22 @@ abstract class DataObject
     }
 
     /**
-     * Gets a single instance of a class object or false if entry doesn't exist.
+     * Hook for add method. Child overwrite required.
+     */
+    protected function addHook() { }
+
+    /**
+     * Hook for update method. Child overwrite required.
+     */
+    protected function updateHook() { }
+
+    /**
+     * Hook for delete method. Child overwrite required.
+     */
+    protected function deleteHook() { }
+
+    /**
+     * Gets a single instance of a class object.
      * @param $primary_key_value
      * @return bool|mixed
      */
@@ -277,25 +370,25 @@ abstract class DataObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
-            throw new \Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (WHERE)");
+            throw new ObjectException("Property '" . $property . "' was not found in class '" . $class_name . "'. (WHERE)");
         }
 
         // Ensure operator is allowed and safe.
         if (!in_array($operator, $allowed_operators)) {
-            throw new \Exception("Operator '" . $operator . "' is not an allowed operator.");
+            throw new QueryException("Operator '" . $operator . "' is not an allowed operator.");
         }
 
         // Ensure that BETWEEN and NOT BETWEEN have both values.
         if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
             if (!isset($value_2)) {
-                throw new \Exception($operator . " requires 2 values; only one was passed.");
+                throw new QueryException($operator . " requires 2 values; only one was passed.");
             }
         }
 
         // Ensure that type is either AND/OR.
         if (!in_array($type,["AND","OR"])) {
             if (!isset($value_2)) {
-                throw new \Exception($operator . " type can only be 'AND' or 'OR'.");
+                throw new QueryException($operator . " type can only be 'AND' or 'OR'.");
             }
         }
 
@@ -323,17 +416,17 @@ abstract class DataObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
-            throw new \Exception("Property '" . $property . "' was not found in class '" . $class_name . "'. (ORDER)");
+            throw new ObjectException("Property '" . $property . "' was not found in class '" . $class_name . "'. (ORDER)");
         }
 
         // Ensure order is allowed and safe.
         if (!in_array($order, ["ASC", "DESC"])) {
-            throw new \Exception("Order '" . $order . "' is not an allowed order.");
+            throw new QueryException("Order '" . $order . "' is not an allowed order.");
         }
 
         // Ensure function is allowed and safe.
         if (isset($function) && !in_array($function, ["COUNT", "LENGTH", "TRIM"])) {
-            throw new \Exception("Function '" . $function . "' is not an allowed order-level function.");
+            throw new QueryException("Function '" . $function . "' is not an allowed order-level function.");
         }
 
         // Add array of arguments to the order array.
@@ -345,7 +438,7 @@ abstract class DataObject
     }
 
     /**
-     * Finalizes the query and gets objects that match. Returns array of objects or false for no objects.
+     * Finalizes the query and gets objects that match. Returns single objects, array of objects, or false for no objects.
      * @return array|bool
      * @throws \Exception
      */
@@ -482,7 +575,7 @@ abstract class DataObject
                 }
             }
 
-            // If we got a single object, it must be returned in an array
+            // Did we request to return an array?
             if (!is_array($the_return)) {
                 $the_return = [$the_return];
             }
@@ -490,7 +583,7 @@ abstract class DataObject
             return $the_return;
 
         } else {
-            throw new \Exception("Error Code " . $result->errorCode() . ": " . $result->errorInfo() . ".");
+            throw new QueryException("Error Code " . $result->errorCode() . ": " . $result->errorInfo() . ".");
         }
 
     }
