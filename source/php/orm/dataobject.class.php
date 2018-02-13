@@ -9,7 +9,7 @@
 
 namespace System;
 use Exceptions\QueryException, Exceptions\ObjectException;
-use \stdClass;
+use \stdClass, \PDO;
 
 /**
  * Class DataObject
@@ -141,7 +141,7 @@ abstract class DataObject
                 $return_value->last_id = $db->lastInsertId();
 
                 // Execute the add hook if main was successful.
-                $this->addHook();
+                $this->addHook($db);
 
                 // It Was Successful!
                 $return_value->success = true;
@@ -209,7 +209,7 @@ abstract class DataObject
             if ($sth->execute($param_array)) {
 
                 // If main was successful, run update hook
-                $this->updateHook();
+                $this->updateHook($db);
 
                 // Success!
                 $return_value->success = true;
@@ -264,7 +264,7 @@ abstract class DataObject
             if ($db->exec($sql)) {
 
                 // If successful, run the delete hook.
-                $this->deleteHook();
+                $this->deleteHook($db);
 
                 // It Was Successful!
                 $return_value->success = true;
@@ -284,6 +284,9 @@ abstract class DataObject
             // Set fail value and error message.
             $return_value->success = false;
             $return_value->errorInfo = $e->getMessage();
+            
+            // Roll back the changes
+            $db->rollBack();
 
         }
 
@@ -294,18 +297,21 @@ abstract class DataObject
 
     /**
      * Hook for add method. Child overwrite required.
+     * @param PDO $db
      */
-    protected function addHook() { }
+    protected function addHook(PDO $db) { }
 
     /**
      * Hook for update method. Child overwrite required.
+     * @param PDO $db
      */
-    protected function updateHook() { }
+    protected function updateHook(PDO $db) { }
 
     /**
      * Hook for delete method. Child overwrite required.
+     * @param PDO $db
      */
-    protected function deleteHook() { }
+    protected function deleteHook(PDO $db) { }
 
     /**
      * Gets a single instance of a class object.
@@ -322,7 +328,7 @@ abstract class DataObject
 
         $sql = "SELECT * FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value";
 
-        $result = $db->query($sql, \PDO::FETCH_CLASS, $class_name);
+        $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
         if ($result) {
             if ($result->rowCount() == 1) {
@@ -546,7 +552,7 @@ abstract class DataObject
         // Display SQl for Debug
         //echo $sql;
 
-        $result = $db->query($sql, \PDO::FETCH_CLASS, $class_name);
+        $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
 
         // Determine if any results were had.
