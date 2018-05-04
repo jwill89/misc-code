@@ -85,15 +85,15 @@ abstract class DataObject
 
         // Query the database
         $sql = "SELECT 1 FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value LIMIT 1";
-        $sth = $db->query($sql);
+        $stmt = $db->query($sql);
 
         // If we got false, then there was a big fat error.
-        if ($sth === false) {
+        if ($stmt === false) {
             throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
         }
 
         // If we got a result, if there are no rows, then it doesn't exist, or it does.
-        if ($sth->rowCount() > 0)
+        if ($stmt->rowCount() > 0)
             return true;
         else {
             return false;
@@ -133,15 +133,15 @@ abstract class DataObject
 
             // Setup the Query
             $sql = "INSERT INTO " . static::getTableName() . "  (" . implode(",", $field_array) . ") VALUES (" . implode(",", array_fill(0, count($field_array), "?")) . ")";
-            $sth = $db->prepare($sql);
+            $stmt = $db->prepare($sql);
 
-            if ($sth->execute($param_array)) {
+            if ($stmt->execute($param_array)) {
 
                 // Set the Last Inserted ID
                 $return_value->last_id = $db->lastInsertId();
 
                 // Execute the add hook if main was successful.
-                $this->addHook($db);
+                $this->addHook($db, $return_value->last_id);
 
                 // It Was Successful!
                 $return_value->success = true;
@@ -152,7 +152,7 @@ abstract class DataObject
             } else {
 
                 // Throw Exception
-                throw new QueryException(implode(", ", $sth->errorInfo()));
+                throw new QueryException(implode(", ", $stmt->errorInfo()));
 
             }
 
@@ -204,9 +204,9 @@ abstract class DataObject
 
             // Setup the Query
             $sql = "UPDATE " . static::getTableName() . " SET " . implode(",", $field_array) . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
-            $sth = $db->prepare($sql);
+            $stmt = $db->prepare($sql);
 
-            if ($sth->execute($param_array)) {
+            if ($stmt->execute($param_array)) {
 
                 // If main was successful, run update hook
                 $this->updateHook($db);
@@ -220,7 +220,7 @@ abstract class DataObject
             } else {
 
                 // Throw Exception
-                throw new QueryException(implode(", ", $sth->errorInfo()));
+                throw new QueryException(implode(", ", $stmt->errorInfo()));
 
             }
 
@@ -284,7 +284,7 @@ abstract class DataObject
             // Set fail value and error message.
             $return_value->success = false;
             $return_value->errorInfo = $e->getMessage();
-            
+
             // Roll back the changes
             $db->rollBack();
 
@@ -298,8 +298,9 @@ abstract class DataObject
     /**
      * Hook for add method. Child overwrite required.
      * @param PDO $db
+     * @param mixed $new_id
      */
-    protected function addHook(PDO $db) { }
+    protected function addHook(PDO $db, $new_id = null) { }
 
     /**
      * Hook for update method. Child overwrite required.
@@ -554,10 +555,9 @@ abstract class DataObject
 
         $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
-
         // Determine if any results were had.
         if ($result) {
-            if ($result->rowCount() == 1) {
+            if ($result->rowCount() === 1) {
                 $the_return = $result->fetch();
             } else if ($result->rowCount() > 1) {
                 $the_return = $result->fetchAll();
