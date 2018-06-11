@@ -8,8 +8,8 @@
  */
 
 namespace System;
-use Exceptions\QueryException, Exceptions\ObjectException;
-use \stdClass, \PDO;
+use Exceptions\{QueryException,ObjectException};
+use \{stdClass, PDO};
 
 /**
  * Class DataObject
@@ -21,11 +21,7 @@ abstract class DataObject
 
     // Abstract Methods Must be implemeneted by Child Classes
 
-    abstract protected static function getPrimaryKeyName();
-
     abstract protected function getPrimaryKeyValue();
-
-    abstract protected static function getTableName();
 
     abstract public static function filterPost();
 
@@ -45,7 +41,7 @@ abstract class DataObject
                 if (property_exists(get_class($this), $key)) {
 
                     // Is the Value Set?
-                    if (isset($value) && $value != "" && !is_array($value)) {
+                    if (isset($value) && $value != "") {
 
                         // Set the Property Value
                         $this->$key = $value;
@@ -64,10 +60,27 @@ abstract class DataObject
 
         // Return Array without Primary Key Property
         $class_props = get_class_vars(get_class($this));
+
+        // Set the array
         $properties = array_filter(get_object_vars($this), function ($key) use ($class_props) {
             return array_key_exists($key, $class_props);
         }, ARRAY_FILTER_USE_KEY);
-        unset($properties[static::getPrimaryKeyName()]);
+
+        // Unset Primary Key
+        unset($properties[static::PRIMARY_KEY]);
+
+        // Ignore any properties used exclusively for hooks
+        // Note: This must be an array of properties, even if it is a single one.
+        if (defined('static::HOOK_PROPERTIES')) {
+
+            // Loop through hook properties
+            foreach (static::HOOK_PROPERTIES as $p) {
+
+                // Unset the property
+                unset($properties[$p]);
+            }
+
+        }
 
         return $properties;
     }
@@ -84,7 +97,7 @@ abstract class DataObject
         $db = DB::getInstance();
 
         // Query the database
-        $sql = "SELECT 1 FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value LIMIT 1";
+        $sql = "SELECT 1 FROM " . static::TABLE_NAME . " WHERE " . static::PRIMARY_KEY . " = $primary_key_value LIMIT 1";
         $stmt = $db->query($sql);
 
         // If we got false, then there was a big fat error.
@@ -132,7 +145,7 @@ abstract class DataObject
         try {
 
             // Setup the Query
-            $sql = "INSERT INTO " . static::getTableName() . "  (" . implode(",", $field_array) . ") VALUES (" . implode(",", array_fill(0, count($field_array), "?")) . ")";
+            $sql = "INSERT INTO " . static::TABLE_NAME . "  (" . implode(",", $field_array) . ") VALUES (" . implode(",", array_fill(0, count($field_array), "?")) . ")";
             $stmt = $db->prepare($sql);
 
             if ($stmt->execute($param_array)) {
@@ -191,7 +204,7 @@ abstract class DataObject
 
         // If property is not empty, then set to update it.
         foreach (static::getProperties() as $key => $value) {
-            if (isset($value)) {
+            if (isset($value) && !is_array($value)) {
                 $field_array[] = $key . " = ?";
                 $param_array[] = $value;
             }
@@ -203,7 +216,7 @@ abstract class DataObject
         try {
 
             // Setup the Query
-            $sql = "UPDATE " . static::getTableName() . " SET " . implode(",", $field_array) . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+            $sql = "UPDATE " . static::TABLE_NAME . " SET " . implode(",", $field_array) . " WHERE " . static::PRIMARY_KEY . " = " . $this->getPrimaryKeyValue();
             $stmt = $db->prepare($sql);
 
             if ($stmt->execute($param_array)) {
@@ -259,7 +272,7 @@ abstract class DataObject
         try {
 
             // Setup the Query
-            $sql = "DELETE FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = " . $this->getPrimaryKeyValue();
+            $sql = "DELETE FROM " . static::TABLE_NAME . " WHERE " . static::PRIMARY_KEY . " = " . $this->getPrimaryKeyValue();
 
             if ($db->exec($sql)) {
 
@@ -327,7 +340,7 @@ abstract class DataObject
         // Set Class Name
         $class_name = get_called_class();
 
-        $sql = "SELECT * FROM " . static::getTableName() . " WHERE " . static::getPrimaryKeyName() . " = $primary_key_value";
+        $sql = "SELECT * FROM " . static::TABLE_NAME . " WHERE " . static::PRIMARY_KEY . " = $primary_key_value";
 
         $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
@@ -353,6 +366,7 @@ abstract class DataObject
         $obj = new $class_name();
         $obj->where_array = array();
         $obj->order_array = array();
+        $obj->limit_array = array();
 
         return $obj;
     }
@@ -373,7 +387,7 @@ abstract class DataObject
         $class_name = get_class($this);
         $operator = strtoupper($operator);
         $type = strtoupper($type);
-        $allowed_operators = ['=', '!=', '>=', '<=', '>', '<', '<>', 'BETWEEN', 'NOT BETWEEN', 'IN', 'NOT IN', 'LIKE', 'NOT LIKE', '~', '&', '|', '^'];
+        $allowed_operators = ['=', '!=', '>=', '<=', '>', '<', '<>', 'BETWEEN', 'NOT BETWEEN', 'IN', 'NOT IN', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT', '~', '&', '|', '^'];
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
@@ -445,6 +459,32 @@ abstract class DataObject
     }
 
     /**
+     * Adds "LIMIT" clause of the query to find objects.
+     * @param int      $limit
+     * @param int|null $offset
+     * @return $this
+     */
+    final public function limit(int $limit, int $offset = null) {
+
+        // Do we have an offset?
+        if (!is_null($offset)) {
+
+            // Include the Limit and the offset in the array
+            $this->limit_array = [$limit, $offset];
+
+        } else {
+
+            // Add Limit to the Array.
+            $this->limit_array = [$limit];
+
+        }
+
+        // Return the instance to allow for fluent interfacing.
+        return $this;
+
+    }
+
+    /**
      * Finalizes the query and gets objects that match. Returns single objects, array of objects, or false for no objects.
      * @return array|bool
      * @throws \Exception
@@ -459,6 +499,7 @@ abstract class DataObject
 
         $where_clause = "";
         $order_clause = "";
+        $limit_clause = "";
 
         // If there are where clauses to be added, generate the clause.
         if (!empty($this->where_array)) {
@@ -488,7 +529,7 @@ abstract class DataObject
                 }
 
                 // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
-                if ($operator != "IN" && $operator != "NOT IN") {
+                if ($operator != "IN" && $operator != "NOT IN" && $value_1 != "NULL") {
                     $value_1 = "'" . $value_1 . "'";
                 }
                 if (isset($value_2)) {
@@ -538,17 +579,34 @@ abstract class DataObject
 
                 // Add to the Order Clause
                 if (isset($function)) {
-                    $order_clause .= "{$function}({$property}) {$order}";
+                    $order_clause .= "{$function}({$property}) {$order} ";
                 } else {
-                    $order_clause .= "{$property} {$order}";
+                    $order_clause .= "{$property} {$order} ";
                 }
                 $total++;
 
             }
         }
 
+        if (!empty($this->limit_array)) {
+
+            // Check if we have an offset
+            if (count($this->limit_array) === 2) {
+
+                // Setup with Offset
+                $limit_clause = "LIMIT " . $this->limit_array[0] . " OFFSET " . $this->limit_array[1];
+
+            } else {
+
+                // Setup without  Offset
+                $limit_clause = "LIMIT " . $this->limit_array[0];
+
+            }
+
+        }
+
         // Setup the query to the DB and get the info of the item we are going to edit
-        $sql = "SELECT * FROM " . static::getTableName() . " " . $where_clause . $order_clause;
+        $sql = "SELECT * FROM " . static::TABLE_NAME . " " . $where_clause . $order_clause . $limit_clause;
 
         // Display SQl for Debug
         //echo $sql;
@@ -563,22 +621,6 @@ abstract class DataObject
                 $the_return = $result->fetchAll();
             } else {
                 return false;
-            }
-
-            // If the return is a user class, we need to remove the password
-            if (property_exists($class_name, 'cleared_properties')) {
-                // If we have one object, unset password. if array, unset all passwords.
-                if (!is_array($the_return)) {
-                    foreach ($class_name::$cleared_properties as $property) {
-                        unset($the_return->$property);
-                    }
-                } else {
-                    foreach ($the_return as &$user) {
-                        foreach ($class_name::$cleaered_properties as $property) {
-                            unset($user->$property);
-                        }
-                    }
-                }
             }
 
             // Did we request to return an array?
