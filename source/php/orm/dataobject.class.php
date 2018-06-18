@@ -9,7 +9,7 @@
 
 namespace System;
 use Exceptions\{QueryException,ObjectException};
-use \stdClass, \PDO;
+use \{stdClass, PDO};
 
 /**
  * Class DataObject
