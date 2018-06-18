@@ -9,7 +9,7 @@
 
 namespace System;
 use Exceptions\{QueryException,ObjectException};
-use \{stdClass, PDO};
+use \stdClass, \PDO;
 
 /**
  * Class DataObject
@@ -530,10 +530,10 @@ abstract class DataObject
 
                 // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
                 if ($operator != "IN" && $operator != "NOT IN" && $value_1 != "NULL") {
-                    $value_1 = "'" . $value_1 . "'";
+                    $value_1 = $db->quote($value_1);
                 }
                 if (isset($value_2)) {
-                    $value_2 = "'" . $value_2 . "'";
+                    $value_2 = $db->quote($value_2);
                 }
 
                 // Add to the clause
