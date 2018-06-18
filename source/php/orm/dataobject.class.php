@@ -8,8 +8,8 @@
  */
 
 namespace System;
-use Exceptions\{QueryException,ObjectException};
-use \{stdClass, PDO};
+use Exceptions\{QueryException, ObjectException};
+use \stdClass, \PDO;
 
 /**
  * Class DataObject
@@ -45,10 +45,15 @@ abstract class DataObject
 
                         // Set the Property Value
                         $this->$key = $value;
+
                     }
+
                 }
+
             }
+
         }
+
     }
 
     /**
@@ -102,14 +107,20 @@ abstract class DataObject
 
         // If we got false, then there was a big fat error.
         if ($stmt === false) {
+
             throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
+
         }
 
         // If we got a result, if there are no rows, then it doesn't exist, or it does.
-        if ($stmt->rowCount() > 0)
+        if ($stmt->rowCount() > 0) {
+
             return true;
-        else {
+
+        } else {
+
             return false;
+
         }
 
     }
@@ -133,10 +144,14 @@ abstract class DataObject
 
         // If property is not empty, then set to add it.
         foreach (static::getProperties() as $key => $value) {
+
             if (isset($value)) {
+
                 $field_array[] = $key;
                 $param_array[] = $value;
+
             }
+
         }
 
         // Start the Transaction so we can rollback on error.
@@ -204,10 +219,14 @@ abstract class DataObject
 
         // If property is not empty, then set to update it.
         foreach (static::getProperties() as $key => $value) {
+
             if (isset($value) && !is_array($value)) {
+
                 $field_array[] = $key . " = ?";
                 $param_array[] = $value;
+
             }
+
         }
 
         // Start the Transaction so we can rollback on error.
@@ -345,14 +364,23 @@ abstract class DataObject
         $result = $db->query($sql, PDO::FETCH_CLASS, $class_name);
 
         if ($result) {
+
             if ($result->rowCount() == 1) {
+
                 return $result->fetch();
+
             } else {
+
                 return false;
+
             }
+
         } else {
+
             return false;
+
         }
+
     }
 
     /**
@@ -391,26 +419,38 @@ abstract class DataObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
+
             throw new ObjectException("Property '" . $property . "' was not found in class '" . $class_name . "'. (WHERE)");
+
         }
 
         // Ensure operator is allowed and safe.
         if (!in_array($operator, $allowed_operators)) {
+
             throw new QueryException("Operator '" . $operator . "' is not an allowed operator.");
+
         }
 
         // Ensure that BETWEEN and NOT BETWEEN have both values.
         if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+
             if (!isset($value_2)) {
+
                 throw new QueryException($operator . " requires 2 values; only one was passed.");
+
             }
+
         }
 
         // Ensure that type is either AND/OR.
         if (!in_array($type,["AND","OR"])) {
+
             if (!isset($value_2)) {
+
                 throw new QueryException($operator . " type can only be 'AND' or 'OR'.");
+
             }
+
         }
 
         // Add array of arguments to the where array.
@@ -437,17 +477,23 @@ abstract class DataObject
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
+
             throw new ObjectException("Property '" . $property . "' was not found in class '" . $class_name . "'. (ORDER)");
+
         }
 
         // Ensure order is allowed and safe.
         if (!in_array($order, ["ASC", "DESC"])) {
+
             throw new QueryException("Order '" . $order . "' is not an allowed order.");
+
         }
 
         // Ensure function is allowed and safe.
         if (isset($function) && !in_array($function, ["COUNT", "LENGTH", "TRIM"])) {
+
             throw new QueryException("Function '" . $function . "' is not an allowed order-level function.");
+
         }
 
         // Add array of arguments to the order array.
@@ -520,20 +566,30 @@ abstract class DataObject
 
                 // If this is not the first clause, add the type.
                 if ($where_clause !== "WHERE ") {
+
                     $where_clause .= "{$type} ";
+
                 }
 
                 // Are we starting the group?
                 if ($group_start_end && !$group_open) {
+
                     $where_clause .= "( ";
+
                 }
 
-                // Surround values with single quotes to ensure strings work. MySQL implictly converts to other formats.
+                // Surround value with single quotes to ensure strings work. MySQL implictly converts to other formats.
                 if ($operator != "IN" && $operator != "NOT IN" && $value_1 != "NULL") {
+
                     $value_1 = $db->quote($value_1);
+
                 }
+
+                // Surround value_2 with single quotes to ensure strings work. MySQL implictly converts to other formats.
                 if (isset($value_2)) {
+
                     $value_2 = $db->quote($value_2);
+
                 }
 
                 // Add to the clause
@@ -541,17 +597,23 @@ abstract class DataObject
 
                 // If this is a BETWEEN clause, we need to do AND and then add the second value.
                 if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+
                     $where_clause .= "AND {$value_2} ";
+
                 }
 
                 // Are we closing a group?
                 if ($group_start_end && $group_open) {
+
                     $where_clause .= ") ";
+
                 }
 
                 // Did we Open/Close a group?
                 if ($group_start_end) {
+
                     $group_open = !$group_open;
+
                 }
 
             }
@@ -574,15 +636,23 @@ abstract class DataObject
 
                 // If this is an additional clause, add a comma
                 if ($total > 0) {
+
                     $order_clause .= ", ";
+
                 }
 
                 // Add to the Order Clause
                 if (isset($function)) {
+
                     $order_clause .= "{$function}({$property}) {$order} ";
+
                 } else {
+
                     $order_clause .= "{$property} {$order} ";
+
                 }
+
+                // Incriment Counter
                 $total++;
 
             }
@@ -615,23 +685,35 @@ abstract class DataObject
 
         // Determine if any results were had.
         if ($result) {
+
             if ($result->rowCount() === 1) {
+
                 $the_return = $result->fetch();
-            } else if ($result->rowCount() > 1) {
+
+            } elseif ($result->rowCount() > 1) {
+
                 $the_return = $result->fetchAll();
+
             } else {
+
                 return false;
+
             }
 
             // Did we request to return an array?
             if (!is_array($the_return)) {
+
                 $the_return = [$the_return];
+
             }
 
             return $the_return;
 
         } else {
+
+            // Query Exception
             throw new QueryException("Error Code " . $result->errorCode() . ": " . $result->errorInfo() . ".");
+
         }
 
     }
