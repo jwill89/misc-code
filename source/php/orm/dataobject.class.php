@@ -1,12 +1,5 @@
 <?php
 
-/**
- * Created by PhpStorm.
- * User: jwill
- * Date: 10/17/2017
- * Time: 10:21 AM
- */
-
 namespace System;
 use Exceptions\{QueryException, ObjectException};
 use \stdClass, \PDO;
