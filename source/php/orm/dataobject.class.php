@@ -22,8 +22,9 @@ abstract class DataObject
      * DatabaseObject constructor. Takes array of properties and sets matching keys.
      * @param array|null $arr
      */
-    function __construct(array $arr = null)
+    public function __construct(array $arr = null)
     {
+
         // Is the Array Not Empty?
         if (!empty($arr) && is_array($arr)) {
 
@@ -34,7 +35,7 @@ abstract class DataObject
                 if (property_exists(get_class($this), $key)) {
 
                     // Is the Value Set?
-                    if (isset($value) && $value != "") {
+                    if (isset($value) && $value !== "") {
 
                         // Set the Property Value
                         $this->$key = $value;
@@ -57,7 +58,7 @@ abstract class DataObject
     {
 
         // Return Array without Primary Key Property
-        $class_props = get_class_vars(get_class($this));
+        $class_props = get_class_vars(static::class);
 
         // Set the array
         $properties = array_filter(get_object_vars($this), function ($key) use ($class_props) {
@@ -87,7 +88,7 @@ abstract class DataObject
      * Returns a true/false if an object exists with the requested primary key value.
      * @param int $primary_key_value
      * @return bool
-     * @throws \Exception
+     * @throws QueryException
      */
     final public static function exists(int $primary_key_value): bool
     {
@@ -98,21 +99,14 @@ abstract class DataObject
         $sql = "SELECT 1 FROM " . static::TABLE_NAME . " WHERE " . static::PRIMARY_KEY . " = $primary_key_value LIMIT 1";
         $stmt = $db->query($sql);
 
-        // If we got false, then there was a big fat error.
-        if ($stmt === false) {
+        // If we did not fail the query, return if we got a row, otherwise throw an exception.
+        if ($stmt) {
 
-            throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
-
-        }
-
-        // If we got a result, if there are no rows, then it doesn't exist, or it does.
-        if ($stmt->rowCount() > 0) {
-
-            return true;
+            return ($stmt->rowCount() > 0);
 
         } else {
 
-            return false;
+            throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
 
         }
 
@@ -136,7 +130,7 @@ abstract class DataObject
         $param_array = array();
 
         // If property is not empty, then set to add it.
-        foreach (static::getProperties() as $key => $value) {
+        foreach ($this->getProperties() as $key => $value) {
 
             if (isset($value)) {
 
@@ -203,7 +197,6 @@ abstract class DataObject
         // Use GLOBAL to access DB
         $db = DB::getInstance();
 
-        // Set the Return Value object
         $return_value = new stdClass;
 
         // Set default empty arrays
@@ -211,7 +204,7 @@ abstract class DataObject
         $param_array = array();
 
         // If property is not empty, then set to update it.
-        foreach (static::getProperties() as $key => $value) {
+        foreach ($this->getProperties() as $key => $value) {
 
             if (isset($value) && !is_array($value)) {
 
@@ -325,19 +318,19 @@ abstract class DataObject
      * @param PDO $db
      * @param mixed $new_id
      */
-    protected function addHook(PDO $db, $new_id = null) { }
+    protected function addHook(PDO $db, $new_id = null): void { }
 
     /**
      * Hook for update method. Child overwrite required.
      * @param PDO $db
      */
-    protected function updateHook(PDO $db) { }
+    protected function updateHook(PDO $db): void { }
 
     /**
      * Hook for delete method. Child overwrite required.
      * @param PDO $db
      */
-    protected function deleteHook(PDO $db) { }
+    protected function deleteHook(PDO $db): void { }
 
     /**
      * Gets a single instance of a class object.
@@ -350,7 +343,7 @@ abstract class DataObject
         $db = DB::getInstance();
 
         // Set Class Name
-        $class_name = get_called_class();
+        $class_name = static::class;
 
         $sql = "SELECT * FROM " . static::TABLE_NAME . " WHERE " . static::PRIMARY_KEY . " = $primary_key_value";
 
@@ -358,21 +351,15 @@ abstract class DataObject
 
         if ($result) {
 
-            if ($result->rowCount() == 1) {
+            if ($result->rowCount() === 1) {
 
                 return $result->fetch();
 
-            } else {
-
-                return false;
-
             }
 
-        } else {
-
-            return false;
-
         }
+
+        return false;
 
     }
 
@@ -382,7 +369,7 @@ abstract class DataObject
      */
     final public static function find()
     {
-        $class_name = get_called_class();
+        $class_name = static::class;
 
         $obj = new $class_name();
         $obj->where_array = array();
@@ -403,9 +390,9 @@ abstract class DataObject
      * @return $this
      * @throws \Exception
      */
-    final public function where(string $property, string $operator, $value, $value_2 = null, string $type = "AND", bool $group_start_end = false)
+    final public function where(string $property, string $operator, $value, $value_2 = null, string $type = "AND", bool $group_start_end = false): self
     {
-        $class_name = get_class($this);
+        $class_name = static::class;
         $operator = strtoupper($operator);
         $type = strtoupper($type);
         $allowed_operators = ['=', '!=', '>=', '<=', '>', '<', '<>', 'BETWEEN', 'NOT BETWEEN', 'IN', 'NOT IN', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT', '~', '&', '|', '^'];
@@ -418,14 +405,14 @@ abstract class DataObject
         }
 
         // Ensure operator is allowed and safe.
-        if (!in_array($operator, $allowed_operators)) {
+        if (!in_array($operator, $allowed_operators, true)) {
 
             throw new QueryException("Operator '" . $operator . "' is not an allowed operator.");
 
         }
 
         // Ensure that BETWEEN and NOT BETWEEN have both values.
-        if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+        if (in_array($operator,["BETWEEN", "NOT BETWEEN"])) {
 
             if (!isset($value_2)) {
 
@@ -436,13 +423,9 @@ abstract class DataObject
         }
 
         // Ensure that type is either AND/OR.
-        if (!in_array($type,["AND","OR"])) {
+        if (!in_array($type,["AND", "OR"])) {
 
-            if (!isset($value_2)) {
-
-                throw new QueryException($operator . " type can only be 'AND' or 'OR'.");
-
-            }
+            throw new QueryException($operator . " type can only be 'AND' or 'OR'.");
 
         }
 
@@ -462,11 +445,11 @@ abstract class DataObject
      * @return $this
      * @throws \Exception
      */
-    final public function order(string $property, string $order = "DESC", string $function = null)
+    final public function order(string $property, string $order = "DESC", string $function = null): self
     {
-        $class_name = get_class($this);
+        $class_name = static::class;
         $order = strtoupper($order);
-        $function = (isset($function)) ? strtoupper($function) : null;
+        $function = isset($function) ? strtoupper($function) : null;
 
         // Ensure property is valid for class.
         if (!array_key_exists($property, get_class_vars($class_name))) {
@@ -483,7 +466,7 @@ abstract class DataObject
         }
 
         // Ensure function is allowed and safe.
-        if (isset($function) && !in_array($function, ["COUNT", "LENGTH", "TRIM"])) {
+        if (isset($function) && !in_array($function, ["COUNT", "LENGTH", "TRIM", "INET_ATON", "NATSORT"])) {
 
             throw new QueryException("Function '" . $function . "' is not an allowed order-level function.");
 
@@ -503,10 +486,10 @@ abstract class DataObject
      * @param int|null $offset
      * @return $this
      */
-    final public function limit(int $limit, int $offset = null) {
+    final public function limit(int $limit, int $offset = null): self {
 
         // Do we have an offset?
-        if (!is_null($offset)) {
+        if ($offset !== null) {
 
             // Include the Limit and the offset in the array
             $this->limit_array = [$limit, $offset];
@@ -534,7 +517,7 @@ abstract class DataObject
         // DB Connection
         $db = DB::getInstance();
 
-        $class_name = get_class($this);
+        $class_name = static::class;
 
         $where_clause = "";
         $order_clause = "";
@@ -550,12 +533,7 @@ abstract class DataObject
             foreach ($this->where_array as $entry) {
 
                 // Set Variables
-                $property = $entry[0];
-                $operator = $entry[1];
-                $value_1 = $entry[2];
-                $value_2 = $entry[3];
-                $type = $entry[4];
-                $group_start_end = $entry[5];
+                [$property, $operator, $value_1, $value_2, $type, $group_start_end] = $entry;
 
                 // If this is not the first clause, add the type.
                 if ($where_clause !== "WHERE ") {
@@ -572,7 +550,7 @@ abstract class DataObject
                 }
 
                 // Surround value with single quotes to ensure strings work. MySQL implictly converts to other formats.
-                if ($operator != "IN" && $operator != "NOT IN" && $value_1 != "NULL") {
+                if (!in_array($operator, ["IN", "NOT IN"]) && $value_1 !== "NULL") {
 
                     $value_1 = $db->quote($value_1);
 
@@ -589,7 +567,7 @@ abstract class DataObject
                 $where_clause .= "{$property} {$operator} {$value_1} ";
 
                 // If this is a BETWEEN clause, we need to do AND and then add the second value.
-                if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+                if (in_array($operator, ["BETWEEN", "NOT BETWEEN"])) {
 
                     $where_clause .= "AND {$value_2} ";
 
@@ -623,9 +601,7 @@ abstract class DataObject
             foreach ($this->order_array as $entry) {
 
                 // Set the Properties
-                $property = $entry[0];
-                $order = $entry[1];
-                $function = $entry[2];
+                [$property, $order, $function] = $entry;
 
                 // If this is an additional clause, add a comma
                 if ($total > 0) {
@@ -637,7 +613,15 @@ abstract class DataObject
                 // Add to the Order Clause
                 if (isset($function)) {
 
-                    $order_clause .= "{$function}({$property}) {$order} ";
+                    if ($function === "NATSORT") {
+
+                        $order_clause .= "udf_NaturalSortFormat({$property}, 10, '.') ";
+
+                    } else {
+
+                        $order_clause .= "{$function}({$property}) {$order} ";
+
+                    }
 
                 } else {
 
@@ -649,6 +633,7 @@ abstract class DataObject
                 $total++;
 
             }
+
         }
 
         if (!empty($this->limit_array)) {
