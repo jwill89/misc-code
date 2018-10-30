@@ -1,5 +1,21 @@
 <?php
 
+/*******************
+ * DATA OBJECT BASE CLASS
+ *
+ * This is the parent class for every subseqent application's classes. It is designed to be both an ORM that deals with
+ * the database directly, as well as a factory that can produce objects of any children classes when called from the
+ * child class. It also has a built-in query builder functionality to grab existing objects from the databases.
+ *
+ * While we could parse out the functionality, keeping it unified makes things easier in the long run for a project as
+ * small as this one.
+ *
+ * Note: This was built for MySQL and includes code to handle some quirks. Function could be added to check for a 
+ * database type and function changed accordingly.
+ *
+ ******************/
+
+
 namespace System;
 use Exceptions\{QueryException, ObjectException};
 use \stdClass, \PDO;
@@ -141,6 +157,9 @@ abstract class DataObject
 
         }
 
+        // Disable Foreign key Checks before running to allow the Add Hook to bypass InnoDB shortcomings
+        $db->exec("SET foreign_key_checks = 0");
+
         // Start the Transaction so we can rollback on error.
         $db->beginTransaction();
 
@@ -181,6 +200,9 @@ abstract class DataObject
             $db->rollBack();
 
         }
+
+        // Enable Foreign key Checks after the SQL has committed or been rolled back
+        $db->exec("SET foreign_key_checks = 1");
 
         // Return the info
         return $return_value;
@@ -318,19 +340,19 @@ abstract class DataObject
      * @param PDO $db
      * @param mixed $new_id
      */
-    protected function addHook(PDO $db, $new_id = null): void { }
+    protected function addHook(PDO $db, $new_id = null) { }
 
     /**
      * Hook for update method. Child overwrite required.
      * @param PDO $db
      */
-    protected function updateHook(PDO $db): void { }
+    protected function updateHook(PDO $db) { }
 
     /**
      * Hook for delete method. Child overwrite required.
      * @param PDO $db
      */
-    protected function deleteHook(PDO $db): void { }
+    protected function deleteHook(PDO $db) { }
 
     /**
      * Gets a single instance of a class object.
@@ -674,7 +696,7 @@ abstract class DataObject
 
             } else {
 
-                return false;
+                return [];
 
             }
 
