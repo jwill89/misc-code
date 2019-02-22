@@ -128,6 +128,11 @@ abstract class DataObject
 
     }
 
+    /**
+     * Returns true/false if an similar object exists in the database. Checks for everything but the priary key.
+     * @return bool
+     * @throws QueryException
+     */
     final public function similarExists(): bool
     {
 
