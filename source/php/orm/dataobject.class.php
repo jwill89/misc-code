@@ -10,7 +10,7 @@
  * While we could parse out the functionality, keeping it unified makes things easier in the long run for a project as
  * small as this one.
  *
- * Note: This was built for MySQL and includes code to handle some quirks. Function could be added to check for a 
+ * Note: This was built for MySQL and includes code to handle some quirks. Function could be added to check for a
  * database type and function changed accordingly.
  *
  ******************/
@@ -123,6 +123,41 @@ abstract class DataObject
         } else {
 
             throw new QueryException("Error: The 'item exists' query failed in the DataObject class.");
+
+        }
+
+    }
+
+    final public function similarExists(): bool
+    {
+
+        // Using the DB
+        $db = DB::getInstance();
+
+        // Start the SQL Statement
+        $sql = "SELECT 1 FROM " . static::TABLE_NAME . " WHERE ";
+
+        // Loop Through Properties
+        foreach ($this->getProperties() as $key => $value) {
+
+            $sql .= "{$key} = " . $db->quote($this->$key) . " AND ";
+
+        }
+
+        // Trim Final And
+        $sql = rtrim($sql, " AND ");
+
+        // Query
+        $stmt = $db->query($sql);
+
+        // If we did not fail the query, return if we got a row, otherwise throw an exception.
+        if ($stmt) {
+
+            return ($stmt->rowCount() > 0);
+
+        } else {
+
+            throw new QueryException("Error: The 'similar exists' query failed in the DataObject class.");
 
         }
 
