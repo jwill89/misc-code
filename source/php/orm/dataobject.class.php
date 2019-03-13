@@ -48,7 +48,7 @@ abstract class DataObject
             foreach ($arr as $key => $value) {
 
                 // Does the Key Match a Property of the Class?
-                if (property_exists(get_class($this), $key)) {
+                if (property_exists(static::class, $key)) {
 
                     // Is the Value Set?
                     if (isset($value) && $value !== "") {
