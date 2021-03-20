@@ -68,9 +68,10 @@ abstract class DataObject
 
     /**
      * Gets all properties of the object except the primary key and returns an array.
+     * @param bool $no_primary_key
      * @return array
      */
-    protected function getProperties(): array
+    protected function getProperties(bool $no_primary_key = true): array
     {
 
         // Return Array without Primary Key Property
@@ -82,7 +83,11 @@ abstract class DataObject
         }, ARRAY_FILTER_USE_KEY);
 
         // Unset Primary Key
-        unset($properties[static::PRIMARY_KEY]);
+        if ($no_primary_key) {
+
+            unset($properties[static::PRIMARY_KEY]);
+
+        }
 
         // Ignore any properties used exclusively for hooks
         // Note: This must be an array of properties, even if it is a single one.
@@ -172,7 +177,7 @@ abstract class DataObject
      * Takes an object and adds it to the database.
      * @return stdClass
      */
-    final public function add()
+    final public function add(bool $no_primary_key = true): stdClass
     {
 
         // DB Connection
@@ -182,11 +187,11 @@ abstract class DataObject
         $return_value = new stdClass;
 
         // Set default empty arrays
-        $field_array = array();
-        $param_array = array();
+        $field_array = [];
+        $param_array = [];
 
         // If property is not empty, then set to add it.
-        foreach ($this->getProperties() as $key => $value) {
+        foreach ($this->getProperties($no_primary_key) as $key => $value) {
 
             if (isset($value)) {
 
@@ -253,7 +258,7 @@ abstract class DataObject
      * Updates an object already in the database.
      * @return stdClass
      */
-    final public function update()
+    final public function update(): stdClass
     {
 
         // Use GLOBAL to access DB
@@ -262,8 +267,8 @@ abstract class DataObject
         $return_value = new stdClass;
 
         // Set default empty arrays
-        $field_array = array();
-        $param_array = array();
+        $field_array = [];
+        $param_array = [];
 
         // If property is not empty, then set to update it.
         foreach ($this->getProperties() as $key => $value) {
@@ -434,9 +439,9 @@ abstract class DataObject
         $class_name = static::class;
 
         $obj = new $class_name();
-        $obj->where_array = array();
-        $obj->order_array = array();
-        $obj->limit_array = array();
+        $obj->where_array = [];
+        $obj->order_array = [];
+        $obj->limit_array = [];
 
         return $obj;
     }
